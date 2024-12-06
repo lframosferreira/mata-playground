@@ -2858,6 +2858,97 @@ TEST_CASE("mata::nfa::reduce_size_by_simulation()")
     }
 }
 
+TEST_CASE("mata::nfa::algorithms::minimize_hopcroft()") {
+    SECTION("empty automaton") {
+        Nfa aut;
+        Nfa result = minimize_hopcroft(aut);
+        CHECK(result.is_lang_empty());
+    }
+
+    SECTION("one state") {
+        Nfa aut(1);
+        aut.initial.insert(0);
+        aut.final.insert(0);
+        Nfa result = minimize_hopcroft(aut);
+        CHECK(result.delta.num_of_transitions() == 0);
+        CHECK(result.num_of_states() == 1);
+        CHECK(result.initial.size() == 1);
+        CHECK(result.final.size() == 1);
+        CHECK(result.initial == result.final);
+    }
+
+    SECTION("one trans") {
+        Nfa aut(2);
+        aut.initial.insert(0);
+        aut.final.insert(1);
+        aut.delta.add(0, 'a', 1);
+        Nfa result = minimize_hopcroft(aut);
+        CHECK(result.delta.num_of_transitions() == 1);
+        CHECK(result.num_of_states() == 2);
+        CHECK(result.initial.size() == 1);
+        CHECK(result.final.size() == 1);
+        CHECK(result.initial != result.final);
+        CHECK(are_equivalent(aut, result));
+    }
+
+    SECTION("line") {
+        Nfa aut(3);
+        aut.initial.insert(0);
+        aut.final.insert(2);
+        aut.delta.add(0, 'a', 1);
+        aut.delta.add(1, 'a', 2);
+        aut.delta.add(2, 'a', 3);
+        Nfa result = minimize_hopcroft(aut);
+        CHECK(result.delta.num_of_transitions() == 3);
+        CHECK(result.num_of_states() == 4);
+        CHECK(result.initial.size() == 1);
+        CHECK(result.final.size() == 1);
+        CHECK(result.initial != result.final);
+        CHECK(are_equivalent(aut, result));
+    }
+
+    SECTION("loop") {
+        Nfa aut;
+        aut.initial.insert(0);
+        aut.final.insert(1);
+        aut.delta.add(0, 1, 2);
+        aut.delta.add(1, 0, 1);
+        aut.delta.add(1, 1, 1);
+        aut.delta.add(2, 1, 1);
+
+        Nfa aut_brz = minimize_brzozowski(aut);
+        Nfa aut_hop = minimize_hopcroft(aut);
+        CHECK(are_equivalent(aut_brz, aut_hop));
+        CHECK(aut_brz.num_of_states() == aut_hop.num_of_states());
+        CHECK(aut_brz.delta.num_of_transitions() == aut_hop.delta.num_of_transitions());
+        CHECK(aut_brz.initial.size() == aut_hop.initial.size());
+        CHECK(aut_brz.final.size() == aut_hop.final.size());
+    }
+
+    SECTION("difficult") {
+        Nfa aut;
+        aut.initial.insert(0);
+        aut.final.insert(1);
+        aut.final.insert(6);
+        aut.delta.add(0, 0, 1);
+        aut.delta.add(1, 0, 2);
+        aut.delta.add(2, 0, 4);
+        aut.delta.add(4, 1, 5);
+        aut.delta.add(4, 0, 3);
+        aut.delta.add(5, 0, 6);
+        aut.delta.add(3, 0, 1);
+
+        Nfa aut_brz = minimize_brzozowski(aut);
+        Nfa aut_hop = minimize_hopcroft(aut);
+        CHECK(are_equivalent(aut_brz, aut_hop));
+        CHECK(aut_brz.num_of_states() == aut_hop.num_of_states());
+        CHECK(aut_brz.delta.num_of_transitions() == aut_hop.delta.num_of_transitions());
+        CHECK(aut_brz.initial.size() == aut_hop.initial.size());
+        CHECK(aut_brz.final.size() == aut_hop.final.size());
+    }
+
+}
+
 TEST_CASE("mata::nfa::reduce_size_by_residual()") {
     Nfa aut;
     StateRenaming state_renaming;
@@ -4190,6 +4281,298 @@ TEST_CASE("mata::nfa::Nfa::get_word()") {
         aut.delta.add(3, 'c', 4);
         aut.delta.add(4, 'a', 4);
         CHECK(aut.get_word() == Word{ 'b' });
+    }
+}
+
+TEST_CASE("mata::nfa::Nfa::insert_word()") {
+    Delta delta;
+    delta.add(0, 0, 1);
+    delta.add(0, 4, 0);
+    delta.add(1, 1, 2);
+    delta.add(1, 5, 1);
+    delta.add(2, 2, 3);
+    delta.add(2, 6, 2);
+    delta.add(3, 3, 4);
+    delta.add(3, 7, 3);
+
+    Nfa nfa, expected;
+
+    SECTION("Insert 'a'") {
+        SECTION("src < tgt") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(1, {'a'}, 3);
+            CHECK(new_tgt == 3);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(1, 'a', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("src < tgt && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(1, {'a'}, 4);
+            CHECK(new_tgt == 4);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(1, 'a', 4);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("tgt < src") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(3, {'a'}, 1);
+            CHECK(new_tgt == 1);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(3, 'a', 1);
+
+            CHECK(are_equivalent(nfa, expected));
+
+        }
+
+        SECTION("tgt < src && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(4, {'a'}, 1);
+            CHECK(new_tgt == 1);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(4, 'a', 1);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("self-loop") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(3, {'a'}, 3);
+            CHECK(new_tgt == 3);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(3, 'a', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("self-loop && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(4, {'a'}, 4);
+            CHECK(new_tgt == 4);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(4, 'a', 4);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("tgt is not specified") {
+            nfa = Nfa(delta, { 0 });
+            State new_tgt = nfa.insert_word(1, {'a'});
+            nfa.final.insert(new_tgt);
+
+            expected = Nfa(3, { 0 }, { 2 });
+            expected.delta.add(0, 0, 1);
+            expected.delta.add(0, 4, 0);
+            expected.delta.add(1, 5, 1);
+            expected.delta.add(1, 'a', 2);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+    }
+
+    SECTION("Insert 'ab'") {
+        SECTION("src < tgt") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(1, {'a', 'b'}, 3);
+            CHECK(new_tgt == 3);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(1, 'a', 5);
+            expected.delta.add(5, 'b', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("src < tgt && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(1, {'a', 'b'}, 4);
+            CHECK(new_tgt == 4);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(1, 'a', 5);
+            expected.delta.add(5, 'b', 4);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("tgt < src") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(3, {'a', 'b'}, 1);
+            CHECK(new_tgt == 1);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(3, 'a', 5);
+            expected.delta.add(5, 'b', 1);
+
+            CHECK(are_equivalent(nfa, expected));
+
+        }
+
+        SECTION("tgt < src && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(4, {'a', 'b'}, 1);
+            CHECK(new_tgt == 1);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(4, 'a', 5);
+            expected.delta.add(5, 'b', 1);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("self-loop") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(3, {'a', 'b'}, 3);
+            CHECK(new_tgt == 3);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(3, 'a', 5);
+            expected.delta.add(5, 'b', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("self-loop && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(4, {'a', 'b'}, 4);
+            CHECK(new_tgt == 4);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(4, 'a', 5);
+            expected.delta.add(5, 'b', 4);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("tgt is not specified") {
+            nfa = Nfa(delta, { 0 });
+            State new_tgt = nfa.insert_word(1, {'a', 'b'});
+            nfa.final.insert(new_tgt);
+
+            expected = Nfa(4, { 0 }, { 3 });
+            expected.delta.add(0, 0, 1);
+            expected.delta.add(0, 4, 0);
+            expected.delta.add(1, 5, 1);
+            expected.delta.add(1, 'a', 2);
+            expected.delta.add(2, 'b', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+    }
+
+    SECTION("Insert 'abcd'") {
+        SECTION("src < tgt") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(1, {'a', 'b', 'c', 'd'}, 3);
+            CHECK(new_tgt == 3);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(1, 'a', 5);
+            expected.delta.add(5, 'b', 6);
+            expected.delta.add(6, 'c', 7);
+            expected.delta.add(7, 'd', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("src < tgt && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(1, {'a', 'b', 'c', 'd'}, 4);
+            CHECK(new_tgt == 4);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(1, 'a', 5);
+            expected.delta.add(5, 'b', 6);
+            expected.delta.add(6, 'c', 7);
+            expected.delta.add(7, 'd', 4);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("tgt < src") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(3, {'a', 'b', 'c', 'd'}, 1);
+            CHECK(new_tgt == 1);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(3, 'a', 5);
+            expected.delta.add(5, 'b', 6);
+            expected.delta.add(6, 'c', 7);
+            expected.delta.add(7, 'd', 1);
+
+            CHECK(are_equivalent(nfa, expected));
+
+        }
+
+        SECTION("tgt < src && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(4, {'a', 'b', 'c', 'd'}, 1);
+            CHECK(new_tgt == 1);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(4, 'a', 5);
+            expected.delta.add(5, 'b', 6);
+            expected.delta.add(6, 'c', 7);
+            expected.delta.add(7, 'd', 1);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("self-loop") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(3, {'a', 'b', 'c', 'd'}, 3);
+            CHECK(new_tgt == 3);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(3, 'a', 5);
+            expected.delta.add(5, 'b', 6);
+            expected.delta.add(6, 'c', 7);
+            expected.delta.add(7, 'd', 3);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("self-loop && final.contains(tgt)") {
+            nfa = Nfa(delta, { 0 }, { 4 });
+            State new_tgt = nfa.insert_word(4, {'a', 'b', 'c', 'd'}, 4);
+            CHECK(new_tgt == 4);
+
+            expected = Nfa(delta, { 0 }, { 4 });
+            expected.delta.add(4, 'a', 5);
+            expected.delta.add(5, 'b', 6);
+            expected.delta.add(6, 'c', 7);
+            expected.delta.add(7, 'd', 4);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
+
+        SECTION("tgt is not specified") {
+            nfa = Nfa(delta, { 0 });
+            State new_tgt = nfa.insert_word(1, {'a', 'b', 'c', 'd'});
+            nfa.final.insert(new_tgt);
+
+            expected = Nfa(6, { 0 }, { 5 });
+            expected.delta.add(0, 0, 1);
+            expected.delta.add(0, 4, 0);
+            expected.delta.add(1, 5, 1);
+            expected.delta.add(1, 'a', 2);
+            expected.delta.add(2, 'b', 3);
+            expected.delta.add(3, 'c', 4);
+            expected.delta.add(4, 'd', 5);
+
+            CHECK(are_equivalent(nfa, expected));
+        }
     }
 }
 

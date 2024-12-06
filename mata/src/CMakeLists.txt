@@ -23,6 +23,17 @@ add_library(libmata STATIC
 	nfa/delta.cc
 	nfa/operations.cc
 	nfa/builder.cc
+
+	nft/nft.cc
+	nft/inclusion.cc
+	nft/universal.cc
+	nft/complement.cc
+	nft/composition.cc
+	nft/intersection.cc
+	nft/concatenation.cc
+	nft/operations.cc
+	nft/builder.cc
+	nft/strings.cc
 )
 
 # libmata needs at least c++20
@@ -33,6 +44,11 @@ set_target_properties(libmata PROPERTIES
 )
 
 target_include_directories(libmata PUBLIC "${PROJECT_SOURCE_DIR}/include/")
+
+# For the case of WASM build we need to link with pthread
+if (EMSCRIPTEN)
+	target_link_libraries(libmata PRIVATE pthread)
+endif()
 
 target_link_libraries(libmata PUBLIC cudd simlib)
 target_link_libraries(libmata PRIVATE re2)
